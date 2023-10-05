@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'package:image_picker/image_picker.dart';
+import 'package:multi_image_picker2/multi_image_picker2.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +44,8 @@ class TakePictureScreenState extends State<TakePictureScreen> {
   late Future<void> _initializeControllerFuture;
   late File _image;
   late String _url;
+  List<File> selectedImages = []; // List of selected image
+  final picker = ImagePicker(); // Instance of Image picker
 
   @override
   void initState() {
@@ -62,15 +68,32 @@ class TakePictureScreenState extends State<TakePictureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Take a picture')),
-      body: FutureBuilder<void>(
-        future: _initializeControllerFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            return CameraPreview(_controller);
-          } else {
-            return const Center(child: CircularProgressIndicator());
-          }
-        },
+      body: Column(
+        children: [
+          FutureBuilder<void>(
+            future: _initializeControllerFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.done) {
+                return CameraPreview(_controller);
+              } else {
+                return const Center(child: CircularProgressIndicator());
+              }
+            },
+          ),
+          ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => ImageDownloaderWidget()),
+                );
+              },
+              child: Text("Download Images")),
+          ElevatedButton(
+            onPressed: () {},
+            child: Text("Select Images from Gallery"),
+          )
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -91,10 +114,74 @@ class TakePictureScreenState extends State<TakePictureScreen> {
     );
   }
 
+  Future getImages() async {
+    final pickedFile = await picker.pickMultiImage(
+        imageQuality: 100, // To set quality of images
+        maxHeight: 1000, // To set maxheight of images that you want in your app
+        maxWidth: 1000); // To set maxheight of images that you want in your app
+    List<XFile> xfilePick = pickedFile;
+
+    // if atleast 1 images is selected it will add
+    // all images in selectedImages
+    // variable so that we can easily show them in UI
+    if (xfilePick.isNotEmpty) {
+      for (var i = 0; i < xfilePick.length; i++) {
+        selectedImages.add(File(xfilePick[i].path));
+      }
+      setState(
+        () {},
+      );
+    } else {
+      // If no image is selected it will show a
+      // snackbar saying nothing is selected
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Nothing is selected')));
+    }
+  }
+
+  void uploadImages(List<Asset> images) async {
+    FirebaseStorage storage =
+        FirebaseStorage.instanceFor(bucket: 'gs://fir-747ec.appspot.com');
+    List<Future<TaskSnapshot>> uploadTasks = [];
+
+    for (var image in images) {
+      ByteData byteData = await image.getByteData();
+      List<int> imageData = byteData.buffer.asUint8List();
+
+      Reference ref =
+          storage.ref().child("/firebaseImages/${DateTime.now()}.jpg");
+
+      Uint8List uint8List = Uint8List.fromList(imageData);
+
+      UploadTask uploadTask = ref.putData(uint8List);
+
+      uploadTasks.add(uploadTask.whenComplete(() {}));
+    }
+
+    await Future.wait(uploadTasks);
+
+    print("Upload completed");
+
+    List<String> downloadUrls = [];
+
+    for (var uploadTask in uploadTasks) {
+      TaskSnapshot taskSnapshot = await uploadTask;
+      String url = await taskSnapshot.ref.getDownloadURL();
+      downloadUrls.add(url);
+      print('URL: $url');
+    }
+
+    setState(() {
+      // Handle the list of download URLs as per your requirements
+      //_urls = downloadUrls;
+    });
+  }
+
   void uploadImage(context) async {
     FirebaseStorage storage =
         FirebaseStorage.instanceFor(bucket: 'gs://fir-747ec.appspot.com');
-    Reference ref = storage.ref().child(_image.path);
+    Reference ref =
+        storage.ref().child("/firebaseImages/${DateTime.now()}.jpg");
     UploadTask storageUploadTask = ref.putFile(_image);
     TaskSnapshot taskSnapshot = await storageUploadTask.whenComplete(() {});
     print("success");
@@ -103,18 +190,11 @@ class TakePictureScreenState extends State<TakePictureScreen> {
     setState(() {
       _url = url;
     });
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-          builder: (context) => ImageDownloaderWidget(imageUrl: _url)),
-    );
   }
 }
 
 class ImageDownloaderWidget extends StatefulWidget {
-  final String imageUrl;
-
-  ImageDownloaderWidget({required this.imageUrl});
+  ImageDownloaderWidget();
 
   @override
   _ImageDownloaderWidgetState createState() => _ImageDownloaderWidgetState();
@@ -122,29 +202,25 @@ class ImageDownloaderWidget extends StatefulWidget {
 
 class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
   bool _isLoading = false;
-  String _downloadedImagePath = '';
+  List<String> _downloadedUrls = [];
 
-  void _downloadImage() async {
+  void _downloadImages() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      var response = await http.get(Uri.parse(widget.imageUrl));
-      if (response.statusCode == 200) {
-        String savePath =
-            '/path/to/save/image.jpg'; // Provide the desired save path
-        File file = File(savePath);
-        file.writeAsBytesSync(response.bodyBytes);
-        setState(() {
-          _downloadedImagePath = savePath;
-        });
-        print('Image downloaded successfully.');
-      } else {
-        print('Failed to download image. Error code: ${response.statusCode}');
+      firebase_storage.ListResult result = await firebase_storage
+          .FirebaseStorage.instance
+          .ref("/data/user/0/com.example.firebase_2/cache")
+          .listAll();
+      for (var ref in result.items) {
+        String url = await ref.getDownloadURL();
+        _downloadedUrls.add(url);
+        print('URL: $url');
       }
     } catch (e) {
-      print('Error occurred while downloading image: $e');
+      print('Error occurred while downloading images: $e');
     }
 
     setState(() {
@@ -158,7 +234,29 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
       appBar: AppBar(
         title: Text('Image Downloader'),
       ),
-      body: Image.network(widget.imageUrl),
+      body: Column(
+        children: [
+          ElevatedButton(
+            onPressed: () {
+              _downloadImages();
+            },
+            child: Text('Download Images'),
+          ),
+          if (_isLoading)
+            CircularProgressIndicator()
+          else
+            Expanded(
+              child: ListView.builder(
+                itemCount: _downloadedUrls.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    title: Image.network(_downloadedUrls[index]),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
