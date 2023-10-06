@@ -16,6 +16,7 @@ Future<void> main() async {
 
   final cameras = await availableCameras();
   final firstCamera = cameras.first;
+  
 
   runApp(
     MaterialApp(
@@ -87,10 +88,14 @@ class TakePictureScreenState extends State<TakePictureScreen> {
                   MaterialPageRoute(
                       builder: (context) => ImageDownloaderWidget()),
                 );
+                    printFirebaseStorageFolders();
+
               },
               child: Text("Download Images")),
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () {
+              getImages();
+            },
             child: Text("Select Images from Gallery"),
           )
         ],
@@ -114,67 +119,52 @@ class TakePictureScreenState extends State<TakePictureScreen> {
     );
   }
 
-  Future getImages() async {
-    final pickedFile = await picker.pickMultiImage(
-        imageQuality: 100, // To set quality of images
-        maxHeight: 1000, // To set maxheight of images that you want in your app
-        maxWidth: 1000); // To set maxheight of images that you want in your app
-    List<XFile> xfilePick = pickedFile;
+  Future<void> getImages() async {
+    final pickedFiles = await picker.pickMultiImage(
+      imageQuality: 100, // To set quality of images
+      maxHeight: 1000, // To set maxheight of images that you want in your app
+      maxWidth: 1000, // To set maxheight of images that you want in your app
+    );
 
-    // if atleast 1 images is selected it will add
-    // all images in selectedImages
-    // variable so that we can easily show them in UI
-    if (xfilePick.isNotEmpty) {
-      for (var i = 0; i < xfilePick.length; i++) {
-        selectedImages.add(File(xfilePick[i].path));
+    if (pickedFiles != null && pickedFiles.isNotEmpty) {
+      selectedImages =
+          pickedFiles.map((pickedFile) => File(pickedFile.path)).toList();
+      for (var img in selectedImages) {
+        uploadImageByparameter(context, img);
       }
-      setState(
-        () {},
-      );
+      setState(() {});
     } else {
-      // If no image is selected it will show a
-      // snackbar saying nothing is selected
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Nothing is selected')));
+          .showSnackBar(const SnackBar(content: Text('No images selected')));
     }
   }
 
-  void uploadImages(List<Asset> images) async {
+  void uploadImageByparameter(context, image) async {
     FirebaseStorage storage =
         FirebaseStorage.instanceFor(bucket: 'gs://fir-747ec.appspot.com');
-    List<Future<TaskSnapshot>> uploadTasks = [];
-
-    for (var image in images) {
-      ByteData byteData = await image.getByteData();
-      List<int> imageData = byteData.buffer.asUint8List();
-
-      Reference ref =
-          storage.ref().child("/firebaseImages/${DateTime.now()}.jpg");
-
-      Uint8List uint8List = Uint8List.fromList(imageData);
-
-      UploadTask uploadTask = ref.putData(uint8List);
-
-      uploadTasks.add(uploadTask.whenComplete(() {}));
-    }
-
-    await Future.wait(uploadTasks);
-
-    print("Upload completed");
-
-    List<String> downloadUrls = [];
-
-    for (var uploadTask in uploadTasks) {
-      TaskSnapshot taskSnapshot = await uploadTask;
-      String url = await taskSnapshot.ref.getDownloadURL();
-      downloadUrls.add(url);
-      print('URL: $url');
-    }
-
+    Reference ref =
+        storage.ref().child("/firebaseImages/${DateTime.now()}.jpg");
+    UploadTask storageUploadTask = ref.putFile(image);
+    TaskSnapshot taskSnapshot = await storageUploadTask.whenComplete(() {});
+    print("success");
+    String url = await taskSnapshot.ref.getDownloadURL();
+    print('URL: $url');
     setState(() {
-      // Handle the list of download URLs as per your requirements
-      //_urls = downloadUrls;
+      _url = url;
     });
+  }
+
+  void printFirebaseStorageFolders() async {
+    final storage = FirebaseStorage.instance;
+    final bucketUrl = 'gs://fir-747ec.appspot.com';
+
+    firebase_storage.Reference storageRef = storage.ref().child('/data');
+    List<firebase_storage.Reference> prefixes =
+        (await storageRef.listAll()) as List<Reference>;
+
+    for (firebase_storage.Reference prefix in prefixes) {
+      print('Folder: ${prefix.name}');
+    }
   }
 
   void uploadImage(context) async {
@@ -212,7 +202,7 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
     try {
       firebase_storage.ListResult result = await firebase_storage
           .FirebaseStorage.instance
-          .ref("/data/user/0/com.example.firebase_2/cache")
+          .ref("/firebaseImages/")
           .listAll();
       for (var ref in result.items) {
         String url = await ref.getDownloadURL();
