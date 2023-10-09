@@ -16,7 +16,6 @@ Future<void> main() async {
 
   final cameras = await availableCameras();
   final firstCamera = cameras.first;
-  
 
   runApp(
     MaterialApp(
@@ -41,6 +40,8 @@ class TakePictureScreen extends StatefulWidget {
 }
 
 class TakePictureScreenState extends State<TakePictureScreen> {
+  bool isImageUpdated = true;
+
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
   late File _image;
@@ -59,6 +60,43 @@ class TakePictureScreenState extends State<TakePictureScreen> {
     _initializeControllerFuture = _controller.initialize();
   }
 
+  Future<void> _takePhoto() async {
+    final picker = ImagePicker();
+    final pickedFile =
+        await picker.pickImage(source: ImageSource.camera, imageQuality: 50);
+
+    setState(() {
+      if (pickedFile != null) {
+        _image = File(pickedFile.path);
+        uploadImageToBRP_Mobile_Photo_Anomalies(context, _image);
+        isImageUpdated = false;
+      }
+    });
+  }
+  List<String> imageUrls = [];
+
+Future<void> captureMultiplePhotos() async {
+  List<XFile>? pickedFiles = await ImagePicker().pickMultiImage();
+  
+  if (pickedFiles != null && pickedFiles.isNotEmpty) {
+    for (var file in pickedFiles) {
+      String fileName = path.basename(file.path);
+      Reference ref = FirebaseStorage.instance
+          .ref()
+          .child("/BRP_Mobile_Photo_Anomalies/${todayDate}/id1/$fileName");
+      
+      UploadTask storageUploadTask = ref.putFile(File(file.path));
+      TaskSnapshot taskSnapshot = await storageUploadTask.whenComplete(() {});
+      
+      String url = await taskSnapshot.ref.getDownloadURL();
+      imageUrls.add(url);
+    }
+    
+    // Perform any additional actions with the uploaded image URLs
+    print('Uploaded Image URLs: $imageUrls');
+  }
+}
+
   @override
   void dispose() {
     _controller.dispose();
@@ -69,53 +107,54 @@ class TakePictureScreenState extends State<TakePictureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Take a picture')),
-      body: Column(
-        children: [
-          FutureBuilder<void>(
-            future: _initializeControllerFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.done) {
-                return CameraPreview(_controller);
-              } else {
-                return const Center(child: CircularProgressIndicator());
-              }
-            },
-          ),
-          ElevatedButton(
+      body: Container(
+        margin: EdgeInsets.only(top: MediaQuery.of(context).size.height * .3),
+        alignment: Alignment.center,
+        child: Column(
+          children: [
+            ElevatedButton(
+                onPressed: () {
+                  _takePhoto();
+                },
+                child: Text("take a photo")),
+            ElevatedButton(
+              onPressed: isImageUpdated
+                  ? () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => ImageDownloaderWidget()),
+                      );
+                      printFirebaseStorageFolders();
+                    }
+                  : null,
+              child: Text("Download Images"),
+            ),
+            ElevatedButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => ImageDownloaderWidget()),
-                );
-                    printFirebaseStorageFolders();
-
+                getImages();
               },
-              child: Text("Download Images")),
-          ElevatedButton(
-            onPressed: () {
-              getImages();
-            },
-            child: Text("Select Images from Gallery"),
-          )
-        ],
+              child: Text("Select Images from Gallery"),
+            )
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          try {
-            await _initializeControllerFuture;
-            setState(() async {
-              XFile _imagefile = await _controller.takePicture();
-              _image = File(_imagefile.path);
-              // _image = (await _controller.takePicture()).path as File;
-              uploadImage(context);
-            });
-          } catch (e) {
-            print(e);
-          }
-        },
-        child: const Icon(Icons.camera_alt),
-      ),
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: () async {
+      //     try {
+      //       await _initializeControllerFuture;
+      //       setState(() async {
+      //         XFile _imagefile = await _controller.takePicture();
+      //         _image = File(_imagefile.path);
+      //         // _image = (await _controller.takePicture()).path as File;
+      //         uploadImageToBRP_Mobile_Photo_Anomalies(context, _image);
+      //       });
+      //     } catch (e) {
+      //       print(e);
+      //     }
+      //   },
+      //   child: const Icon(Icons.camera_alt),
+      // ),
     );
   }
 
@@ -127,10 +166,11 @@ class TakePictureScreenState extends State<TakePictureScreen> {
     );
 
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
+      isImageUpdated = false;
       selectedImages =
           pickedFiles.map((pickedFile) => File(pickedFile.path)).toList();
       for (var img in selectedImages) {
-        uploadImageByparameter(context, img);
+        uploadImageToBRP_Mobile_Photo_Anomalies(context, img);
       }
       setState(() {});
     } else {
@@ -139,11 +179,16 @@ class TakePictureScreenState extends State<TakePictureScreen> {
     }
   }
 
-  void uploadImageByparameter(context, image) async {
+  
+
+  void uploadImageToBRP_Mobile_Photo_Anomalies(context, image) async {
     FirebaseStorage storage =
         FirebaseStorage.instanceFor(bucket: 'gs://fir-747ec.appspot.com');
-    Reference ref =
-        storage.ref().child("/firebaseImages/${DateTime.now()}.jpg");
+    var todayDate =
+        "${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year}";
+    print(todayDate);
+    Reference ref = storage.ref().child(
+        "/BRP_Mobile_Photo_Anomalies/${todayDate}/id1/${DateTime.now()}.jpg");
     UploadTask storageUploadTask = ref.putFile(image);
     TaskSnapshot taskSnapshot = await storageUploadTask.whenComplete(() {});
     print("success");
@@ -152,18 +197,23 @@ class TakePictureScreenState extends State<TakePictureScreen> {
     setState(() {
       _url = url;
     });
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Image is successfully updated')));
+    setState(() {
+      isImageUpdated = true;
+    });
   }
 
   void printFirebaseStorageFolders() async {
-    final storage = FirebaseStorage.instance;
-    final bucketUrl = 'gs://fir-747ec.appspot.com';
-
-    firebase_storage.Reference storageRef = storage.ref().child('/data');
-    List<firebase_storage.Reference> prefixes =
-        (await storageRef.listAll()) as List<Reference>;
-
-    for (firebase_storage.Reference prefix in prefixes) {
-      print('Folder: ${prefix.name}');
+    final storageRef = FirebaseStorage.instance.ref().child("");
+    final listResult = await storageRef.listAll();
+    for (var prefix in listResult.prefixes) {
+      print("----------------->${prefix.name} ");
+      // The prefixes under storageRef.
+      // You can call listAll() recursively on them.
+    }
+    for (var item in listResult.items) {
+      // The items under storageRef.
     }
   }
 
@@ -194,15 +244,16 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
   bool _isLoading = false;
   List<String> _downloadedUrls = [];
 
-  void _downloadImages() async {
+  Future<void> _downloadImages() async {
     setState(() {
       _isLoading = true;
     });
-
+    var todayDate =
+        "${DateTime.now().day}-${DateTime.now().month}-${DateTime.now().year}";
     try {
       firebase_storage.ListResult result = await firebase_storage
           .FirebaseStorage.instance
-          .ref("/firebaseImages/")
+          .ref("/BRP_Mobile_Photo_Anomalies/${todayDate}/id1")
           .listAll();
       for (var ref in result.items) {
         String url = await ref.getDownloadURL();
@@ -212,9 +263,16 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
     } catch (e) {
       print('Error occurred while downloading images: $e');
     }
+  }
 
-    setState(() {
-      _isLoading = false;
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    _downloadImages().then((value) {
+      setState(() {
+        _isLoading = false;
+      });
     });
   }
 
@@ -226,21 +284,36 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
       ),
       body: Column(
         children: [
-          ElevatedButton(
-            onPressed: () {
-              _downloadImages();
-            },
-            child: Text('Download Images'),
-          ),
           if (_isLoading)
-            CircularProgressIndicator()
+            Center(
+              heightFactor: 20,
+              child: CircularProgressIndicator(),
+            )
           else
             Expanded(
               child: ListView.builder(
-                itemCount: _downloadedUrls.length,
+                itemCount: (_downloadedUrls.length / 2).ceil(),
                 itemBuilder: (context, index) {
-                  return ListTile(
-                    title: Image.network(_downloadedUrls[index]),
+                  int startIndex = index * 2;
+                  int endIndex = startIndex + 1;
+                  if (endIndex >= _downloadedUrls.length) {
+                    endIndex = _downloadedUrls.length - 1;
+                  }
+                  List<String> imageUrls =
+                      _downloadedUrls.sublist(startIndex, endIndex + 1);
+                  return Row(
+                    children: imageUrls.map((url) {
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Image.network(
+                            url,
+                            width: 200,
+                            height: 200,
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   );
                 },
               ),
