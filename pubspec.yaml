@@ -43,6 +43,16 @@ dependencies:
   image_picker: ^1.0.4
   multi_image_picker2: ^5.0.02
   multiple_images_picker: ^1.0.1
+  image_gallery_saver: ^2.0.3
+  photo_manager: ^2.7.2
+  path_provider: ^2.1.1
+  flutter_image_compress: ^2.0.4
+  flutter_sliding_up_panel: ^2.1.1
+  permission_handler: ^11.0.1
+  photo_gallery: ^2.1.1
+  intl: ^0.18.1
+  better_open_file: ^3.6.4
+  camerawesome: ^1.4.0
   
 
 dev_dependencies:
@@ -68,8 +78,8 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
+  assets:
+    - assets/ss.png
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
