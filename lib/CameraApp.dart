@@ -79,6 +79,7 @@ class CameraAppState extends State<CameraApp> {
   moduleProcessing() async {
     await loadImages();
     await cameraLoad();
+    selectedImageCount = 0;
 
     fillUpImagesList(imageFromgallery);
   }
@@ -92,6 +93,22 @@ class CameraAppState extends State<CameraApp> {
 
     // loadImages();
     // cameraLoad();
+  }
+
+  int counting = 0;
+  Timer? timer;
+  void startTimer() {
+    timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      setState(() {
+        if (counting < 5) {
+          counting++;
+        } else {
+          Navigator.of(context).pop();
+
+          timer.cancel();
+        }
+      });
+    });
   }
 
   cameraLoad() async {
@@ -166,9 +183,9 @@ class CameraAppState extends State<CameraApp> {
 
   static var imageFromgallery = [];
   loadImages() async {
-    imageAlbums = await PhotoGallery.listAlbums(
-      mediumType: MediumType.image,
-    );
+    //it retrive all the albums from pictures folder on the phone automatically
+    imageAlbums = await PhotoGallery.listAlbums();
+    print("---------> ${imageAlbums[1]}");
     imageMedium = {};
     for (var element in imageAlbums) {
       var data = await element.listMedia();
@@ -215,6 +232,7 @@ class CameraAppState extends State<CameraApp> {
       imageQuality: 100, // To set quality of images
       maxHeight: 1000, // To set maxheight of images that you want in your app
       maxWidth: 1000, // To set maxheight of images that you want in your app
+      
     );
     var length = 0;
 
@@ -310,14 +328,52 @@ class CameraAppState extends State<CameraApp> {
                                           index += 1;
                                         }
                                       }
+
                                       print("---> ${index}");
                                       ScaffoldMessenger.of(context)
-                                          .showSnackBar(const SnackBar(
-                                              content: Text(
-                                                  'Images is successfully updated')));
-                                      Navigator.of(context).pop();
+                                          .showSnackBar(SnackBar(
+                                        content: Row(
+                                          children: [
+                                            Text("Uploading... "),
+                                            Padding(
+                                              padding: EdgeInsets.only(
+                                                  left: MediaQuery.of(context)
+                                                          .size
+                                                          .width *
+                                                      .55),
+                                              child: CircularProgressIndicator(
+                                                  color: Colors.blue),
+                                            ),
+                                          ],
+                                        ),
+                                      ));
+                                      startTimer();
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(
+                                        content: Text(
+                                            'Images is successfully updated'),
+                                      ));
                                     },
                                     child: Icon(Icons.check),
+                                    
+                                  ),
+                                  if (selectedImageCount > 0)
+                                  Positioned(
+                                    bottom: 60,
+                                    child: Container(
+                                      padding: EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Text(
+                                        selectedImageCount.toString(),
+                                        style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
                                   ),
                                 ]),
                         )),
@@ -398,7 +454,35 @@ class CameraAppState extends State<CameraApp> {
                                   onPressed: () {
                                     getImagesFromGalleryAndUpload().then(
                                       (value) {
-                                        Navigator.of(context).pop();
+                                        if (selectedImagesFromGallery.length >
+                                            0) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(SnackBar(
+                                            content: Row(
+                                              children: [
+                                                Text("Uploading... "),
+                                                Padding(
+                                                  padding: EdgeInsets.only(
+                                                      left:
+                                                          MediaQuery.of(context)
+                                                                  .size
+                                                                  .width *
+                                                              .55),
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                          color: Colors.blue),
+                                                ),
+                                              ],
+                                            ),
+                                          ));
+                                          startTimer();
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(SnackBar(
+                                            content: Text(
+                                                'Images is successfully updated'),
+                                          ));
+                                        }
+                                        ;
                                       },
                                     );
                                   },
