@@ -4,6 +4,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:photo_manager/photo_manager.dart';
+
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
@@ -14,6 +16,7 @@ import 'package:flutter_sliding_up_panel/flutter_sliding_up_panel.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_gallery/photo_gallery.dart';
 import "package:intl/intl.dart";
+import 'package:shimmer/shimmer.dart';
 
 class CameraApp extends StatefulWidget {
   final bool isMultiple;
@@ -59,7 +62,7 @@ class CameraAppState extends State<CameraApp> {
   bool isImageSelected = false;
   bool isProcessDone = false;
 
-  List<Map<String, dynamic>> selectedImages = [];
+  final List<Map<String, dynamic>> selectedImages = [];
 
   void fillUpImagesList(List imageListPath) {
     for (var i = 0; i < imageListPath.length; i++) {
@@ -86,7 +89,11 @@ class CameraAppState extends State<CameraApp> {
 
   @override
   void initState() {
+    imagesFromGalleryCount = 0;
     super.initState();
+    setState(() {
+      isloading = true;
+    });
     imageFromgallery = [];
 
     moduleProcessing();
@@ -113,7 +120,7 @@ class CameraAppState extends State<CameraApp> {
 
   cameraLoad() async {
     cameras = await availableCameras();
-    controller = CameraController(cameras[0], ResolutionPreset.max,
+    controller = CameraController(cameras[0], ResolutionPreset.veryHigh,
         imageFormatGroup: Platform.isIOS ? ImageFormatGroup.bgra8888 : null);
     controller!.initialize().then((_) {
       if (!mounted) {
@@ -181,25 +188,68 @@ class CameraAppState extends State<CameraApp> {
     return false;
   }
 
-  static var imageFromgallery = [];
-  loadImages() async {
-    //it retrive all the albums from pictures folder on the phone automatically
-    imageAlbums = await PhotoGallery.listAlbums();
-    print("---------> ${imageAlbums[1]}");
-    imageMedium = {};
-    for (var element in imageAlbums) {
-      var data = await element.listMedia();
+  bool isloading = true;
+  List<File> imageFromgallery = [];
+  static int imagesFromGalleryCount = 0;
+  bool isAllLoaded = false;
+  static var imagesFromAlbum = [];
+  List<AssetEntity> assets = [];
+  List<Image> images = [];
+  Future<void> loadImages() async {
+    // Request permission to access the gallery
 
-      imageMedium.addAll(data.items);
+    // Load all the asset paths from the gallery
+    List<AssetPathEntity> paths =
+        await PhotoManager.getAssetPathList(onlyAll: true);
+
+    for (var path in paths) {
+      // Fetch all the assets in the current path
+      List<AssetEntity> assets =
+          await path.getAssetListRange(start: 0, end: 20);
+
+      for (var asset in assets) {
+        // Fetch the file associated with the asset
+        File? file = await asset.file;
+        if (file != null && file.path.toLowerCase().endsWith(".jpg")) {
+          // compressFile(file).then((value) {
+          //   imageFromgallery.add(value);
+          // });
+          // Add the file to the imagesFromGallery list
+          imageFromgallery.add(file);
+        }
+
+        // Print the file path
+        //print("--${file!.path}");
+      }
+      for (var element in imageFromgallery) {
+        Image img = Image.file(element);
+        images.add(img);
+        print("length ${images.length}");
+      }
+      setState(() {
+        isloading = false;
+      });
     }
+  }
 
-    for (var element in imageMedium) {
-      File file = await element.getFile();
+  //compress file
+  Future<File> compressFile(File file) async {
+    final filePath = file.absolute.path;
 
-      imageFromgallery.add(file);
-    }
-
-    setState(() {});
+    // Create output file path
+    // eg:- "Volume/VM/abcd_out.jpeg"
+    final lastIndex = filePath.lastIndexOf(new RegExp(r'.jpg'));
+    final splitted = filePath.substring(0, (lastIndex));
+    final outPath = "${splitted}_out${filePath.substring(lastIndex)}";
+    var xfile = await FlutterImageCompress.compressAndGetFile(
+      file.absolute.path,
+      outPath,
+      quality: 5,
+    );
+    var result = File(xfile!.path);
+    print("----${file.lengthSync()}");
+    print("----${result.lengthSync()}");
+    return result;
   }
 
   @override
@@ -229,10 +279,10 @@ class CameraAppState extends State<CameraApp> {
   static int selectedImageCount = 0;
   Future<void> getImagesFromGalleryAndUpload() async {
     final pickedFiles = await ImagePicker().pickMultiImage(
+      requestFullMetadata: false,
       imageQuality: 100, // To set quality of images
       maxHeight: 1000, // To set maxheight of images that you want in your app
       maxWidth: 1000, // To set maxheight of images that you want in your app
-      
     );
     var length = 0;
 
@@ -303,7 +353,7 @@ class CameraAppState extends State<CameraApp> {
                   alignment: Alignment.bottomCenter,
                   child: Container(
                     width: MediaQuery.of(context).size.width,
-                    height: 250,
+                    height: 300,
                     color: Colors.transparent,
                     child: Column(
                       children: [
@@ -355,34 +405,38 @@ class CameraAppState extends State<CameraApp> {
                                       ));
                                     },
                                     child: Icon(Icons.check),
-                                    
                                   ),
                                   if (selectedImageCount > 0)
-                                  Positioned(
-                                    bottom: 60,
-                                    child: Container(
-                                      padding: EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Text(
-                                        selectedImageCount.toString(),
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold),
+                                    Positioned(
+                                      bottom: 60,
+                                      child: Container(
+                                        padding: EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Text(
+                                          selectedImageCount.toString(),
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold),
+                                        ),
                                       ),
                                     ),
-                                  ),
                                 ]),
                         )),
                         SizedBox(
-                          height: 60,
+                          height: 100,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
+                            cacheExtent: 9999,
                             itemCount: imageFromgallery.length,
-                            itemBuilder: (BuildContext context, int index) {
+                            itemBuilder: (
+                              BuildContext context,
+                              int index,
+                            ) {
+                              print("object");
                               return InkWell(
                                 onTap: () {
                                   setState(() {
@@ -508,25 +562,26 @@ class CameraAppState extends State<CameraApp> {
                                   //compress([file]);
                                   setState(() async {
                                     imageFromgallery = [];
-                                    await loadImages();
+                                    await loadImages().then((value) {
+                                      selectedImages.insert(0, {
+                                        'id': imageFromgallery.length,
+                                        'imagePath': file,
+                                        'selected': true,
+                                      });
+                                      selectedImages[0]["selected"] = true;
+                                      selectedImageCount++;
+                                      for (var element in selectedImages) {
+                                        if (element["selected"] == true) {
+                                          hide = false;
+
+                                          return;
+                                        } else {
+                                          hide = true;
+                                        }
+                                      }
+                                    });
 
                                     //fillUpImagesList(imageFromgallery);
-                                    selectedImages.insert(0, {
-                                      'id': imageFromgallery.length,
-                                      'imagePath': file,
-                                      'selected': true,
-                                    });
-                                    selectedImages[0]["selected"] = true;
-                                    selectedImageCount++;
-                                    for (var element in selectedImages) {
-                                      if (element["selected"] == true) {
-                                        hide = false;
-
-                                        return;
-                                      } else {
-                                        hide = true;
-                                      }
-                                    }
                                   });
                                 },
                                 child: Container(

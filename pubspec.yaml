@@ -53,6 +53,7 @@ dependencies:
   intl: ^0.18.1
   better_open_file: ^3.6.4
   camerawesome: ^1.4.0
+  shimmer: ^3.0.0
   
 
 dev_dependencies:
