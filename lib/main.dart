@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'CameraApp.dart';
 
@@ -47,8 +48,6 @@ class TakePictureScreenState extends State<TakePictureScreen> {
   @override
   void initState() {
     super.initState();
-
-   
   }
 
   Future<void> _takePhoto() async {
@@ -208,7 +207,7 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
     try {
       firebase_storage.ListResult result = await firebase_storage
           .FirebaseStorage.instance
-          .ref("/BRP_Mobile_Photo_Anomalies/${todayDate}/id1")
+          .ref("/BRP_Mobile_Photo_Anomalies/$todayDate/id1")
           .listAll();
       for (var ref in result.items) {
         String url = await ref.getDownloadURL();
@@ -217,18 +216,17 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
       }
     } catch (e) {
       print('Error occurred while downloading images: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
-    _downloadImages().then((value) {
-      setState(() {
-        _isLoading = false;
-      });
-    });
+    _downloadImages();
   }
 
   @override
@@ -237,44 +235,29 @@ class _ImageDownloaderWidgetState extends State<ImageDownloaderWidget> {
       appBar: AppBar(
         title: Text('Image Downloader'),
       ),
-      body: Column(
-        children: [
-          if (_isLoading)
-            Center(
-              heightFactor: 20,
+      body: _isLoading
+          ? Center(
               child: CircularProgressIndicator(),
             )
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: (_downloadedUrls.length / 2).ceil(),
-                itemBuilder: (context, index) {
-                  int startIndex = index * 2;
-                  int endIndex = startIndex + 1;
-                  if (endIndex >= _downloadedUrls.length) {
-                    endIndex = _downloadedUrls.length - 1;
-                  }
-                  List<String> imageUrls =
-                      _downloadedUrls.sublist(startIndex, endIndex + 1);
-                  return Row(
-                    children: imageUrls.map((url) {
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Image.network(
-                            url,
-                            width: 200,
-                            height: 200,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  );
-                },
+          : GridView.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
               ),
+              itemCount: _downloadedUrls.length,
+              itemBuilder: (context, index) {
+                String url = _downloadedUrls[index];
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Image.network(
+                    url,
+                    width: 200,
+                    height: 200,
+                  ),
+                );
+              },
             ),
-        ],
-      ),
     );
   }
 }

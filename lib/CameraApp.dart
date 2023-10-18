@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:flutter_exif_rotation/flutter_exif_rotation.dart';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -120,8 +121,11 @@ class CameraAppState extends State<CameraApp> {
 
   cameraLoad() async {
     cameras = await availableCameras();
-    controller = CameraController(cameras[0], ResolutionPreset.veryHigh,
-        imageFormatGroup: Platform.isIOS ? ImageFormatGroup.bgra8888 : null);
+
+    controller = CameraController(
+      cameras[0],
+      ResolutionPreset.ultraHigh,
+    );
     controller!.initialize().then((_) {
       if (!mounted) {
         return;
@@ -134,42 +138,6 @@ class CameraAppState extends State<CameraApp> {
       });
 
       setState(() {});
-    });
-    bottomController.addListener(() {
-      if (bottomController.position.atEdge) {
-        bool isTop = bottomController.position.pixels == 0;
-        if (!isTop) {
-          if (imageMedium.length > (pageCount2 * pageIndex2)) {
-            setState(() {
-              pageIndex2++;
-            });
-            if (pageCount2 * (pageIndex2) > imageMedium.length) {
-              //fix here
-              count2 = imageMedium.length;
-            } else {
-              count2 = pageCount2 * pageIndex2;
-            }
-          }
-        }
-      }
-    });
-    topController.addListener(() {
-      if (topController.position.atEdge) {
-        bool isTop = topController.position.pixels == 0;
-        if (!isTop) {
-          if (imageMedium.length > (pageCount * pageIndex)) {
-            setState(() {
-              pageIndex++;
-            });
-            if (pageCount * (pageIndex) > imageMedium.length) {
-              //fix here
-              count = imageMedium.length;
-            } else {
-              count = pageCount * pageIndex;
-            }
-          }
-        }
-      }
     });
   }
 
@@ -205,7 +173,7 @@ class CameraAppState extends State<CameraApp> {
     for (var path in paths) {
       // Fetch all the assets in the current path
       List<AssetEntity> assets =
-          await path.getAssetListRange(start: 0, end: 20);
+          await path.getAssetListRange(start: 0, end: 50);
 
       for (var asset in assets) {
         // Fetch the file associated with the asset
@@ -244,7 +212,7 @@ class CameraAppState extends State<CameraApp> {
     var xfile = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
       outPath,
-      quality: 5,
+      quality: 20,
     );
     var result = File(xfile!.path);
     print("----${file.lengthSync()}");
@@ -321,14 +289,7 @@ class CameraAppState extends State<CameraApp> {
     if (!controller!.value.isInitialized) {
       return Container();
     }
-    return WillPopScope(
-      onWillPop: () {
-        if (panelController.status == SlidingUpPanelStatus.expanded) {
-          panelController.hide();
-          return Future.value(false);
-        }
-        return Future.value(true);
-      },
+    return Container(
       child: Stack(
         children: [
           Scaffold(
@@ -465,7 +426,10 @@ class CameraAppState extends State<CameraApp> {
                                   });
                                 },
                                 child: Padding(
-                                    padding: const EdgeInsets.all(10.0),
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: SizedBox(
+                                    width: 100,
+                                    height: 100,
                                     child: Stack(
                                       fit: StackFit.passthrough,
                                       alignment: AlignmentDirectional.center,
@@ -495,7 +459,9 @@ class CameraAppState extends State<CameraApp> {
                                             ),
                                           ),
                                       ],
-                                    )),
+                                    ),
+                                  ),
+                                ),
                               );
                             },
                           ),
@@ -505,40 +471,9 @@ class CameraAppState extends State<CameraApp> {
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
                               IconButton(
-                                  onPressed: () {
-                                    getImagesFromGalleryAndUpload().then(
-                                      (value) {
-                                        if (selectedImagesFromGallery.length >
-                                            0) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(SnackBar(
-                                            content: Row(
-                                              children: [
-                                                Text("Uploading... "),
-                                                Padding(
-                                                  padding: EdgeInsets.only(
-                                                      left:
-                                                          MediaQuery.of(context)
-                                                                  .size
-                                                                  .width *
-                                                              .55),
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                          color: Colors.blue),
-                                                ),
-                                              ],
-                                            ),
-                                          ));
-                                          startTimer();
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(SnackBar(
-                                            content: Text(
-                                                'Images is successfully updated'),
-                                          ));
-                                        }
-                                        ;
-                                      },
-                                    );
+                                  onPressed: () async {
+                                    await _showModalBottomSheet(context);
+                                    setState(() {});
                                   },
                                   icon: const Icon(
                                       Icons.add_photo_alternate_rounded,
@@ -549,7 +484,14 @@ class CameraAppState extends State<CameraApp> {
                                   XFile file2 = await controller!.takePicture();
                                   File file = File(file2.path);
 
-                                  Uint8List dataFile = await file.readAsBytes();
+// Read the image data as bytes
+
+// Rotate the image 90 degrees clockwise
+                                  File rotatedImage =
+                                      await FlutterExifRotation.rotateImage(
+                                          path: file.path);
+                                  Uint8List dataFile =
+                                      await rotatedImage.readAsBytes();
                                   String fileName = DateTime.now()
                                       .millisecondsSinceEpoch
                                       .toString();
@@ -597,7 +539,7 @@ class CameraAppState extends State<CameraApp> {
                                           color: Colors.white, width: 3)),
                                 ),
                               ),
-                              (!kIsWeb && (cameras.length > 1))
+                              (cameras.length > 1)
                                   ? IconButton(
                                       onPressed: () {
                                         if (camIndex + 1 >= cameras.length) {
@@ -650,6 +592,151 @@ class CameraAppState extends State<CameraApp> {
         ],
       ),
     );
+  }
+
+  Future<dynamic> _showModalBottomSheet(BuildContext context) async {
+    return showModalBottomSheet(
+        context: context,
+        builder: (BuildContext context) {
+          return StatefulBuilder(
+              builder: (BuildContext context, StateSetter setState) {
+            return Scaffold(
+              appBar: AppBar(
+                title: Row(
+                  children: [
+                    Text("Gallery Photos"),
+                    Container(
+                      margin: EdgeInsets.only(
+                          left: MediaQuery.of(context).size.width * .15),
+                      child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            primary: Colors.white, // Background color
+                            onPrimary:
+                                Colors.black, // Text Color (Foreground color)
+                          ),
+                          onPressed: () {
+                            int index = 0;
+                            print("send!!!");
+
+                            for (var img in selectedImages) {
+                              if (img["selected"] == true) {
+                                uploadImageToBRP_Mobile_Photo_Anomalies(
+                                    context, img["imagePath"]);
+                                index += 1;
+                              }
+                            }
+                            if (index > 0) {
+                              print("---> ${index}");
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(
+                                content: Row(
+                                  children: [
+                                    Text("Uploading... "),
+                                    Padding(
+                                      padding: EdgeInsets.only(
+                                          left: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              .55),
+                                      child: CircularProgressIndicator(
+                                          color: Colors.blue),
+                                    ),
+                                  ],
+                                ),
+                              ));
+                              startTimer();
+                              Navigator.of(context).pop();
+
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(
+                                content: Text('Images is successfully updated'),
+                              ));
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('No images selected')));
+                            }
+                          },
+                          child: Text("✔ send ${selectedImageCount}")),
+                    )
+                  ],
+                ),
+              ),
+              body: Container(
+                height: MediaQuery.of(context).size.height * 0.8,
+                child: GridView.builder(
+                  itemCount: selectedImages.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 5,
+                    mainAxisSpacing: 5,
+                  ),
+                  itemBuilder: (BuildContext context, int index) {
+                    return InkWell(
+                      onTap: () {
+                        // widget.onImageSelected(widget.images[index]);
+                        // Navigator.of(context).pop();
+                        setState(() {
+                          // isImageSelected = !isImageSelected;
+                          selectedImages[index]['selected'] =
+                              !selectedImages[index]['selected'];
+                          // selectedImages.add({
+                          //   'id': index,
+                          //   'imagePath': imageFromgallery[index],
+                          //   'selected': true,
+                          // });
+                          if (selectedImages[index]['selected']) {
+                            selectedImageCount++;
+                          } else {
+                            selectedImageCount--;
+                          }
+                          for (var element in selectedImages) {
+                            if (element["selected"] == true) {
+                              hide = false;
+
+                              return;
+                            } else {
+                              hide = true;
+                            }
+                          }
+                        });
+                      },
+                      child: Padding(
+                          padding: const EdgeInsets.all(10.0),
+                          child: Stack(
+                            fit: StackFit.passthrough,
+                            alignment: AlignmentDirectional.center,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(.2),
+                                ),
+                                child: Image.file(
+                                  selectedImages[index]["imagePath"],
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              if (selectedImages[index]['selected'])
+                                Container(
+                                  width:
+                                      MediaQuery.of(context).size.width * .17,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(.2),
+                                  ),
+                                  child: Icon(
+                                    Icons.done,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                            ],
+                          )),
+                    );
+                  },
+                ),
+              ),
+            );
+          });
+        });
   }
 
   compress(List<File> files) async {
