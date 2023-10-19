@@ -481,29 +481,32 @@ class CameraAppState extends State<CameraApp> {
                                       color: Colors.white)),
                               InkWell(
                                 onTap: () async {
-                                  XFile file2 = await controller!.takePicture();
-                                  File file = File(file2.path);
+                                  setState(() {
+                                    imageFromgallery = [];
+                                  });
+                                  //compress([file]);
+                                  setState(() async {
+                                    XFile file2 =
+                                        await controller!.takePicture();
+                                    File file = File(file2.path);
 
 // Read the image data as bytes
 
 // Rotate the image 90 degrees clockwise
-                                  File rotatedImage =
-                                      await FlutterExifRotation.rotateImage(
-                                          path: file.path);
-                                  Uint8List dataFile =
-                                      await rotatedImage.readAsBytes();
-                                  String fileName = DateTime.now()
-                                      .millisecondsSinceEpoch
-                                      .toString();
-                                  await ImageGallerySaver.saveImage(
-                                    dataFile,
-                                    quality: 100,
-                                    name: "$fileName.jpg",
-                                  );
+                                    File rotatedImage =
+                                        await FlutterExifRotation.rotateImage(
+                                            path: file.path);
+                                    Uint8List dataFile =
+                                        await rotatedImage.readAsBytes();
+                                    String fileName = DateTime.now()
+                                        .millisecondsSinceEpoch
+                                        .toString();
+                                    await ImageGallerySaver.saveImage(
+                                      dataFile,
+                                      quality: 100,
+                                      name: "$fileName.jpg",
+                                    );
 
-                                  //compress([file]);
-                                  setState(() async {
-                                    imageFromgallery = [];
                                     await loadImages().then((value) {
                                       selectedImages.insert(0, {
                                         'id': imageFromgallery.length,
